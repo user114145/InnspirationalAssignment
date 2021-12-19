@@ -8,7 +8,7 @@
 // </auto-generated>
 //------------------------------------------------------------------------------
 
-namespace _2.Properties {
+namespace Simple_MT940_Checker.Properties {
     using System;
     
     

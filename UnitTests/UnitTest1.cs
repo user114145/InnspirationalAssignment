@@ -1,6 +1,6 @@
 ﻿using System;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
-using _2;
+using Simple_MT940_Checker;
 
 namespace UnitTests
 {

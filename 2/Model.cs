@@ -5,15 +5,14 @@ using System.Reflection;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
-using System.Text.RegularExpressions;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
 
-namespace _2
+namespace Simple_MT940_Checker
 {
     public static class Model
     {
 
         public enum FileExtensions { xml, csv }
+
 
         delegate List<(string transactionRef, string transactionDescr)> FileCheckFunction(string content);
 
@@ -72,7 +71,45 @@ namespace _2
         }
 
 
-        #region HelperFunctons
+
+        #region Helper Classes
+
+        class TransactionRefChecker
+        {
+            public List<int> TransactionReferences;
+
+            /// <summary>
+            /// Keeps a list of transaction references
+            /// </summary>
+            public TransactionRefChecker() {
+                TransactionReferences = new List<int>();
+            }
+
+            /// <summary>
+            /// Checks whether the transaction reference is unique.
+            /// </summary>
+            public bool IsUnique_Reference(int reference)
+            {
+                // This would be the place to make a call to a database that keeps track of all transactions.
+                // I would suggest an internal webservice that offers a restfull API over HTTP.
+                // Transaction history could be stored as a hash of the transaction details,
+                // indexed by reference number, to comply with GDPR by not unnecessary storing sensitive information.
+
+                // For now only checking within the active batch.
+                if (TransactionReferences.Contains(reference))
+                    return false;
+                else {
+                    TransactionReferences.Add(reference);
+                    return true;
+                }
+            }
+
+        }
+
+        #endregion
+
+
+        #region Helper Functons
 
 
 

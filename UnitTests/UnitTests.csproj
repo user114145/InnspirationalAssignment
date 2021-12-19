@@ -56,9 +56,9 @@
     <None Include="packages.config" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\2\2.csproj">
+    <ProjectReference Include="..\2\Simple_MT940_Checker.csproj">
       <Project>{ad16de37-894c-45a0-9681-f4df6009c4c7}</Project>
-      <Name>2</Name>
+      <Name>Simple_MT940_Checker</Name>
     </ProjectReference>
   </ItemGroup>
   <Import Project="$(VSToolsPath)\TeamTest\Microsoft.TestTools.targets" Condition="Exists('$(VSToolsPath)\TeamTest\Microsoft.TestTools.targets')" />

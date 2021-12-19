@@ -9,7 +9,7 @@ using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 
-namespace _2
+namespace Simple_MT940_Checker
 {
     public partial class View : Form
     {

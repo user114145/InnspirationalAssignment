@@ -4,7 +4,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 
-namespace _2
+namespace Simple_MT940_Checker
 {
     static class Program
     {

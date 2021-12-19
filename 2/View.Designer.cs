@@ -1,5 +1,5 @@
 ﻿
-namespace _2
+namespace Simple_MT940_Checker
 {
     partial class View
     {
