@@ -5,6 +5,7 @@ using System.Reflection;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using System.Text.RegularExpressions;
 
 namespace Simple_MT940_Checker
 {
@@ -12,14 +13,15 @@ namespace Simple_MT940_Checker
     {
 
         public enum FileExtensions { xml, csv }
+        public enum ColumnName { Reference, Account_Number, Description, Start_Balance, Mutation, End_Balance };
 
-
-        delegate List<(string transactionRef, string transactionDescr)> FileCheckFunction(string content);
+        delegate List<(string transactionRef, string transactionDescr, List<string> validationErrors)> FileCheckFunction(StreamReader reader);
 
         static Dictionary<FileExtensions, FileCheckFunction> CheckFunctions_per_FileType = new Dictionary<FileExtensions, FileCheckFunction> {
             { FileExtensions.xml, Check_XML_File }, // XML files 
             { FileExtensions.csv, Check_CSV_File }, // CSV files
         };
+
 
         private static Dictionary<string, (string name, int length)> _IbanLength_per_Country;
         static Dictionary<string, (string name, int length)> IbanLength_per_Country {
@@ -34,11 +36,15 @@ namespace Simple_MT940_Checker
         }
 
 
+        #region Main functionality
+
         public static void Check_File(string filePath, FileExtensions ext)
         {
-            string file_content;
+            StreamReader streamReader;
             try {
-                file_content = File.ReadAllText(filePath);
+                using (FileStream fs = File.Open(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+                    using (BufferedStream bs = new BufferedStream(fs))
+                        streamReader = new StreamReader(bs);                
             }
             catch (Exception ex) {
                 View.ShowAndSave_ErrorMsg($"File could not be opened ({ex.Message})", ex);
@@ -51,44 +57,186 @@ namespace Simple_MT940_Checker
             }
 
             var checkFunction = CheckFunctions_per_FileType[ext];
-
-            var faultyRecords = checkFunction(file_content);
-            
+            try {
+                var faultyRecords = checkFunction(streamReader);
+            }
+            catch (Exception ex) {
+                View.ShowAndSave_ErrorMsg($"Could not validate file: {ex.Message}.", ex);
+            }
         }
 
 
-        private static List<(string transactionRef, string transactionDescr)> Check_XML_File(string content) 
+        private static List<(string transactionRef, string transactionDescr, List<string> validationErrors)> Check_XML_File(StreamReader reader) 
         {
             throw new NotImplementedException("XML here");
 
         }
 
 
-        private static List<(string transactionRef, string transactionDescr)> Check_CSV_File(string content)
+        private static List<(string transactionRef, string transactionDescr, List<string> validationErrors)> Check_CSV_File(StreamReader reader)
         {
-            throw new NotImplementedException("CSV here");
+            var file_validation_result = new List<( string transactionRef, 
+                                                    string transactionDescr, 
+                                                    List<string> validationErrors)>();
+            string line = reader.ReadLine();
 
+            if (line == null)
+                throw new Validation_Exception("File is empty.");
+
+            var colNrs = new Dictionary<ColumnName, int>();
+            int nColls = 0;
+
+            // Check columnNames
+            foreach (var word in line.Split(','))
+                if (Enum.TryParse(word.Trim(' ').Replace(' ', '_'), out ColumnName column))
+                    colNrs.Add(column, nColls++);
+                else
+                    throw new Exception($"Unknown columnname '{word}'");
+
+            foreach (ColumnName expected_colname in Enum.GetValues(typeof(ColumnName)))
+                if (!colNrs.ContainsKey(expected_colname))
+                    throw new Exception($"File does not contain expected column '{expected_colname.ToString().Replace('_', ' ')}'.");
+
+            // Check records
+            var transactionChecker = new TransactionChecker();
+
+            while ((line = reader.ReadLine()) != null) {
+                var words = Array.ConvertAll(line.Split(','), (w)=>w.Trim(' '));
+
+                var transaction = new TransactionChecker.Transaction {
+                    Reference = words[colNrs[ColumnName.Reference]],
+                    IBAN = words[colNrs[ColumnName.Account_Number]],
+                    Description = words[colNrs[ColumnName.Description]],
+                    Start_Balance = words[colNrs[ColumnName.Start_Balance]],
+                    Mutation = words[colNrs[ColumnName.Mutation]],
+                    End_Balance = words[colNrs[ColumnName.End_Balance]],
+                };
+
+                var validation = transactionChecker.Is_Valid_Transaction(transaction);
+
+                if (!validation.valid)
+                    file_validation_result.Add((    transactionRef: transaction.Reference,
+                                                    transactionDescr: transaction.Description,
+                                                    validationErrors: validation.reasons));
+            }
+
+            return file_validation_result;
         }
 
+        #endregion
 
 
         #region Helper Classes
 
-        class TransactionRefChecker
+
+        
+
+
+
+        /// <summary>
+        /// Keeps a list of transaction references
+        /// </summary>
+        class TransactionChecker
         {
-            public List<int> TransactionReferences;
+            HashSet<int> TransactionReferences;
+            Dictionary<string, double> AccountBalaces;
+
+            
+            public TransactionChecker() {
+                TransactionReferences = new HashSet<int>();
+                AccountBalaces = new Dictionary<string, double>();
+            }
 
             /// <summary>
-            /// Keeps a list of transaction references
+            /// Checks for a given transaction whether:    <br/><br/>
+            /// 1. transactionreference is numeric    <br/>
+            /// 2. transactionreference is unique within the file    <br/>
+            /// 3. IBAN code is technically correct    <br/>
+            /// 4. start balance is numeric    <br/>
+            /// 5. mutation is valid (addition or substraction)    <br/>
+            /// 6. end balance is numeric    <br/>
+            /// 7. end balance is the result of applying the mutation to the start balance    <br/>
+            /// 8. start balance matches end balance of previous transaction for that IBAN    <br/>
             /// </summary>
-            public TransactionRefChecker() {
-                TransactionReferences = new List<int>();
+            /// <returns>Whether all prerequisits are met, and a list of reasons if not.</returns>
+            public (bool valid, List<string> reasons) Is_Valid_Transaction(Transaction transaction) 
+            {
+                var reasons = new List<string>();
+                bool valid = true;
+                bool can_check_mutationResult = true;
+                bool can_use_EndBalance = true;
+
+                // 1. transactionreference is numeric
+                if (!int.TryParse(transaction.Reference, out int transactionReference)) {
+                    valid = false;
+                    reasons.Add("Transaction reference is not numeric.");
+                }
+
+                // 2. transactionreference is unique within the file
+                if (!IsUnique_Reference(transactionReference)) {
+                    valid = false;
+                    reasons.Add("Transaction reference is not unique.");
+                }
+
+                // 3. IBAN code is technically correct
+                try { IsValid_IBAN(transaction.IBAN); } 
+                catch (Validation_Exception ex){
+                    valid = false;
+                    reasons.Add(ex.Message);
+                }
+
+                // 4. start balance is numeric
+                if (!double.TryParse(transaction.Start_Balance, out double start_balace)) {
+                    valid = false;
+                    can_check_mutationResult = false;
+                    reasons.Add("Start balance is not numeric.");
+                }
+
+                // 5. mutation is valid (addition or substraction)
+                // assuming local systems region settings match those of document origin
+                double mutation_amount = 0;
+                var match = Regex.Match(transaction.Mutation, @"^ *([+-]) *([0-9.,]+) *$");
+                if (!match.Success || !double.TryParse(match.Groups[2].Value, out mutation_amount)) {
+                    valid = false;
+                    can_check_mutationResult = false;
+                    reasons.Add("Mutation is invalid.");
+                }
+
+                // 6. end balance is numeric
+                if (!double.TryParse(transaction.End_Balance, out double end_balace)) {
+                    valid = false;
+                    can_check_mutationResult = false;
+                    can_use_EndBalance = false;
+                    reasons.Add("End balance is not numeric.");
+                }
+
+                // 7. end balance is the result of applying the mutation to the start balance
+                if (can_check_mutationResult)
+                    if ((match.Groups[1].Value == "+" && start_balace + mutation_amount != end_balace)
+                        || (match.Groups[1].Value == "-" && start_balace - mutation_amount != end_balace)) 
+                    {
+                        valid = false;
+                        can_use_EndBalance = false;
+                        reasons.Add("Applying mutation to Start balace does not result in End balance.");
+                    }
+
+                // 8. start balance matches end balance of previous transaction for that IBAN
+                if (AccountBalaces.ContainsKey(transaction.IBAN)) {
+                    if (start_balace != AccountBalaces[transaction.IBAN]) {
+                        valid = false;
+                        reasons.Add("Start balance of transaction does not match previous End balace for this account.");
+                    }
+                }
+                else if (can_use_EndBalance)
+                    AccountBalaces.Add(transaction.IBAN, end_balace);
+
+                return (valid, reasons);
             }
 
             /// <summary>
             /// Checks whether the transaction reference is unique.
             /// </summary>
-            public bool IsUnique_Reference(int reference)
+            bool IsUnique_Reference(int reference)
             {
                 // This would be the place to make a call to a database that keeps track of all transactions.
                 // I would suggest an internal webservice that offers a restfull API over HTTP.
@@ -96,12 +244,21 @@ namespace Simple_MT940_Checker
                 // indexed by reference number, to comply with GDPR by not unnecessary storing sensitive information.
 
                 // For now only checking within the active batch.
-                if (TransactionReferences.Contains(reference))
-                    return false;
-                else {
-                    TransactionReferences.Add(reference);
-                    return true;
-                }
+                return TransactionReferences.Add(reference);
+            }
+
+
+            /// <summary>
+            /// Contains all information of a single transaction.
+            /// </summary>
+            public struct Transaction
+            {
+                public string Reference;
+                public string IBAN;
+                public string Description;
+                public string Start_Balance;
+                public string Mutation;
+                public string End_Balance;
             }
 
         }
@@ -110,8 +267,6 @@ namespace Simple_MT940_Checker
 
 
         #region Helper Functons
-
-
 
 
         /// <summary>
