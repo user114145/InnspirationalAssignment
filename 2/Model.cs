@@ -15,6 +15,8 @@ namespace Simple_MT940_Checker
         public enum FileExtensions { xml, csv }
         public enum ColumnName { Reference, Account_Number, Description, Start_Balance, Mutation, End_Balance };
 
+        static Dictionary<string, (string name, int length)> IbanLength_per_Country;
+
         delegate List<(string transactionRef, string transactionDescr, List<string> validationErrors)> FileCheckFunction(StreamReader reader);
 
         static Dictionary<FileExtensions, FileCheckFunction> CheckFunctions_per_FileType = new Dictionary<FileExtensions, FileCheckFunction> {
@@ -23,45 +25,33 @@ namespace Simple_MT940_Checker
         };
 
 
-        private static Dictionary<string, (string name, int length)> _IbanLength_per_Country;
-        static Dictionary<string, (string name, int length)> IbanLength_per_Country {
-            get { if (_IbanLength_per_Country == null) {
-                    _IbanLength_per_Country = Load_IbanLength_per_Country();
-                }
-                return _IbanLength_per_Country;
-            }
-            set {
-                _IbanLength_per_Country = value;
-            }
-        }
-
 
         #region Main functionality
 
-        public static void Check_File(string filePath, FileExtensions ext)
+        public static void Check_File(string filePath, FileExtensions ext, I_MyView view)
         {
+            if (IbanLength_per_Country == null)
+                IbanLength_per_Country = Load_IbanLength_per_Country(view);
+
+            if (!CheckFunctions_per_FileType.ContainsKey(ext)) {
+                view.ShowAndSave_ErrorMsg($"Handling of filetype '{ext.ToString()}' is not implemented.", new Exception($"Missing functionality: checkfuntion for '{ext.ToString()}' files."));
+                return;
+            }
+
             StreamReader streamReader;
             try {
                 using (FileStream fs = File.Open(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
-                    using (BufferedStream bs = new BufferedStream(fs))
-                        streamReader = new StreamReader(bs);                
+                using (BufferedStream bs = new BufferedStream(fs)) {
+                    streamReader = new StreamReader(bs);
+
+                    var checkFunction = CheckFunctions_per_FileType[ext];
+
+                    var faultyRecords = checkFunction(streamReader);
+                    view.Show_ValidationResults(faultyRecords);
+                }
             }
             catch (Exception ex) {
-                View.ShowAndSave_ErrorMsg($"File could not be opened ({ex.Message})", ex);
-                return;
-            }
-
-            if (!CheckFunctions_per_FileType.ContainsKey(ext)) {
-                View.ShowAndSave_ErrorMsg($"Handling of filetype '{ext.ToString()}' is not implemented.", new Exception($"Missing functionality: checkfuntion for '{ext.ToString()}' files."));
-                return;
-            }
-
-            var checkFunction = CheckFunctions_per_FileType[ext];
-            try {
-                var faultyRecords = checkFunction(streamReader);
-            }
-            catch (Exception ex) {
-                View.ShowAndSave_ErrorMsg($"Could not validate file: {ex.Message}.", ex);
+                view.ShowAndSave_ErrorMsg($"Could not validate file: {ex.Message}.", ex);
             }
         }
 
@@ -348,7 +338,7 @@ namespace Simple_MT940_Checker
 
 
 
-        private static Dictionary<string, (string name, int length)> Load_IbanLength_per_Country()
+        private static Dictionary<string, (string name, int length)> Load_IbanLength_per_Country(I_MyView view)
         {
             var result = new Dictionary<string, (string name, int length)>();
 
@@ -360,7 +350,7 @@ namespace Simple_MT940_Checker
 
             }
             catch (Exception err) {
-                View.ShowAndSave_ErrorMsg("Could not load reference file 'IbanLength_per_Country.csv'", err, exit:true);
+                view.ShowAndSave_ErrorMsg("Could not load reference file 'IbanLength_per_Country.csv'", err, exit:true);
             }
 
             return result;

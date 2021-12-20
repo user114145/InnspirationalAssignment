@@ -11,7 +11,7 @@ using System.Windows.Forms;
 
 namespace Simple_MT940_Checker
 {
-    public partial class View : Form
+    public partial class View : Form, I_MyView
     {
 
 
@@ -33,13 +33,48 @@ namespace Simple_MT940_Checker
                     return;
                 }
                 else {
-                    Model.Check_File(fileName, ext);
+                    Model.Check_File(fileName, ext, this);
                 }
             }
             catch (Exception ex) {
                 ShowAndSave_ErrorMsg($"File could not be opened ({ex.Message}).", ex);
             }
         }
+
+
+        public void Show_ValidationResults(List<(string transactionRef, string transactionDescr, List<string> validationErrors)> faulty_records) 
+        {
+            dataGridView_ValidationResults.Rows.Clear();
+            dataGridView_ValidationResults.Columns.Clear();
+
+            var columns = dataGridView_ValidationResults.Columns;
+            var rows = dataGridView_ValidationResults.Rows;
+
+            columns.Add("Transaction reference", "Transaction reference");
+            columns[0].ToolTipText = "The transaction reference. Needs to be unique.";
+            columns[0].Width = 150;
+
+            columns.Add("Description", "Description");
+            columns[1].ToolTipText = "The transaction description.";
+            columns[1].Width = 210;
+
+            columns.Add("Validation errors", "Validation errors"); 
+            columns[2].ToolTipText = "The reasons why this transaction is not valid.";
+            columns[2].Width = 217;
+
+            rows.Add(faulty_records.Sum(tr=>tr.validationErrors.Count));
+
+            int rowIdx = 0;
+            foreach (var record in faulty_records) {
+                rows[rowIdx].Cells[0].Value = record.transactionRef;
+                rows[rowIdx].Cells[1].Value = record.transactionDescr;
+                foreach(var error in record.validationErrors)
+                    rows[rowIdx++].Cells[2].Value = error;
+            }
+            
+            this.dataGridView_ValidationResults.Update();
+        }
+
 
 
         #region EventHandlers
@@ -93,7 +128,7 @@ namespace Simple_MT940_Checker
         /// <summary>
         /// Shows a message to the user
         /// </summary>
-        public static void Show_ErrorMsg(string msg, string title = "Error")
+        public void Show_ErrorMsg(string msg, string title = "Error")
         {
             MessageBox.Show(msg, title, MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
@@ -101,7 +136,7 @@ namespace Simple_MT940_Checker
         /// <summary>
         /// Shows a message to the user and saves the full errordescription to a file in the current workingdirectory.
         /// </summary>
-        public static void ShowAndSave_ErrorMsg(string msg, Exception ex, string title = "Error", bool exit=false)
+        public void ShowAndSave_ErrorMsg(string msg, Exception ex, string title = "Error", bool exit=false)
         {
             File.WriteAllText(".\\ERR.txt", $"Unexpected error ocurred at (UTC){DateTime.UtcNow}:\r\n\r\n{ex.ToString()}");
             MessageBox.Show(msg + $"\n\nPlease contact your system administrator for further assistance.\nDetails have been saved to: \n\n'{Environment.CurrentDirectory}\\ERR.txt'", title, MessageBoxButtons.OK, MessageBoxIcon.Error);

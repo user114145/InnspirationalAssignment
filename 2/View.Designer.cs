@@ -31,6 +31,8 @@ namespace Simple_MT940_Checker
             System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(View));
             this.button_OpenFile = new System.Windows.Forms.Button();
             this.label_OpenFile = new System.Windows.Forms.Label();
+            this.dataGridView_ValidationResults = new System.Windows.Forms.DataGridView();
+            ((System.ComponentModel.ISupportInitialize)(this.dataGridView_ValidationResults)).BeginInit();
             this.SuspendLayout();
             // 
             // button_OpenFile
@@ -54,12 +56,25 @@ namespace Simple_MT940_Checker
             this.label_OpenFile.TabIndex = 1;
             this.label_OpenFile.Text = "Open a file by dragging it here, or using the button below.";
             // 
+            // dataGridView_ValidationResults
+            // 
+            this.dataGridView_ValidationResults.AllowUserToAddRows = false;
+            this.dataGridView_ValidationResults.AllowUserToDeleteRows = false;
+            this.dataGridView_ValidationResults.ColumnHeadersHeightSizeMode = System.Windows.Forms.DataGridViewColumnHeadersHeightSizeMode.AutoSize;
+            this.dataGridView_ValidationResults.Location = new System.Drawing.Point(12, 187);
+            this.dataGridView_ValidationResults.Name = "dataGridView_ValidationResults";
+            this.dataGridView_ValidationResults.ReadOnly = true;
+            this.dataGridView_ValidationResults.RowHeadersWidth = 10;
+            this.dataGridView_ValidationResults.Size = new System.Drawing.Size(589, 251);
+            this.dataGridView_ValidationResults.TabIndex = 2;
+            // 
             // View
             // 
             this.AllowDrop = true;
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.ClientSize = new System.Drawing.Size(613, 450);
+            this.Controls.Add(this.dataGridView_ValidationResults);
             this.Controls.Add(this.label_OpenFile);
             this.Controls.Add(this.button_OpenFile);
             this.Icon = ((System.Drawing.Icon)(resources.GetObject("$this.Icon")));
@@ -67,6 +82,7 @@ namespace Simple_MT940_Checker
             this.Text = "Simple MT940 Validator";
             this.DragDrop += new System.Windows.Forms.DragEventHandler(this.View_DragDrop);
             this.DragEnter += new System.Windows.Forms.DragEventHandler(this.View_DragEnter);
+            ((System.ComponentModel.ISupportInitialize)(this.dataGridView_ValidationResults)).EndInit();
             this.ResumeLayout(false);
             this.PerformLayout();
 
@@ -76,6 +92,7 @@ namespace Simple_MT940_Checker
 
         private System.Windows.Forms.Button button_OpenFile;
         private System.Windows.Forms.Label label_OpenFile;
+        private System.Windows.Forms.DataGridView dataGridView_ValidationResults;
     }
 }
 
