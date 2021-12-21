@@ -13,7 +13,15 @@ namespace Simple_MT940_Checker
 {
     public partial class View : Form, I_MyView
     {
+        static Dictionary<string, Encoding> Encodings = new Dictionary<string, Encoding> {
+            { "Automatic", Encoding.Default },
+            {"UTF8", Encoding.UTF8 },
+            {"ASCII", Encoding.ASCII },
+            {"Unicode", Encoding.Unicode }
+        };
 
+        Encoding Prefered_Encoding = Encoding.Default;
+        string LastFileName = "";
 
         public View()
         {
@@ -30,13 +38,16 @@ namespace Simple_MT940_Checker
                     Show_ErrorMsg($"Can not open file of type '{file_extension}'.\r\n" +
                         "Only files of the following types are allowed: " +
                         string.Join(", ", Enum.GetNames(typeof(Model.FileExtensions))));
+                    LastFileName = "";
                     return;
                 }
                 else {
-                    Model.Check_File(fileName, ext, this);
+                    LastFileName = fileName;
+                    Model.Check_File(fileName, ext, this, Prefered_Encoding);
                 }
             }
             catch (Exception ex) {
+                LastFileName = "";
                 ShowAndSave_ErrorMsg($"File could not be opened ({ex.Message}).", ex);
             }
         }
@@ -44,6 +55,7 @@ namespace Simple_MT940_Checker
 
         public void Show_ValidationResults(List<(string transactionRef, string transactionDescr, List<string> validationErrors)> faulty_records) 
         {
+            dataGridView_ValidationResults.Visible = true;
             dataGridView_ValidationResults.Rows.Clear();
             dataGridView_ValidationResults.Columns.Clear();
 
@@ -146,5 +158,12 @@ namespace Simple_MT940_Checker
         }
 
         #endregion
+
+        private void comboBox_encoding_SelectedValueChanged(object sender, EventArgs e)
+        {
+            Prefered_Encoding = Encodings[(string)comboBox_encoding.Items[comboBox_encoding.SelectedIndex]];
+            if (LastFileName != "")
+                Try_OpenFile(LastFileName);
+        }
     }
 }

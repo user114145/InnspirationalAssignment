@@ -6,6 +6,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using System.Text.RegularExpressions;
+using System.Xml;
 
 namespace Simple_MT940_Checker
 {
@@ -28,26 +29,27 @@ namespace Simple_MT940_Checker
 
         #region Main functionality
 
-        public static void Check_File(string filePath, FileExtensions ext, I_MyView view)
+        public static void Check_File(string filePath, FileExtensions ext, I_MyView view, Encoding encoding = null)
         {
             if (IbanLength_per_Country == null)
                 IbanLength_per_Country = Load_IbanLength_per_Country(view);
 
             if (!CheckFunctions_per_FileType.ContainsKey(ext)) {
-                view.ShowAndSave_ErrorMsg($"Handling of filetype '{ext.ToString()}' is not implemented.", new Exception($"Missing functionality: checkfuntion for '{ext.ToString()}' files."));
+                view.ShowAndSave_ErrorMsg($"Handling of filetype '{ext}' is not implemented.", new Exception($"Missing functionality: checkfuntion for '{ext}' files."));
                 return;
             }
-
+            
             StreamReader streamReader;
             try {
-                using (FileStream fs = File.Open(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
-                using (BufferedStream bs = new BufferedStream(fs)) {
-                    streamReader = new StreamReader(bs);
+                using (FileStream fs = File.Open(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite)) {
+                    using (BufferedStream bs = new BufferedStream(fs)) {
+                        streamReader = new StreamReader(bs, encoding??Encoding.UTF8, true);
 
-                    var checkFunction = CheckFunctions_per_FileType[ext];
+                        var checkFunction = CheckFunctions_per_FileType[ext];
 
-                    var faultyRecords = checkFunction(streamReader);
-                    view.Show_ValidationResults(faultyRecords);
+                        var faultyRecords = checkFunction(streamReader);
+                        view.Show_ValidationResults(faultyRecords);
+                    }
                 }
             }
             catch (Exception ex) {
@@ -58,8 +60,82 @@ namespace Simple_MT940_Checker
 
         private static List<(string transactionRef, string transactionDescr, List<string> validationErrors)> Check_XML_File(StreamReader reader) 
         {
-            throw new NotImplementedException("XML here");
+            var file_validation_result = new List<(string transactionRef,
+                                                       string transactionDescr,
+                                                       List<string> validationErrors)>();
+            var transactionChecker = new TransactionChecker();
 
+            var xmlreader = XmlReader.Create(reader);
+
+            xmlreader.ReadToFollowing("record");
+            bool expect_new_record = true;
+
+            while (expect_new_record) {
+
+                expect_new_record = false;
+
+                string reference = xmlreader.GetAttribute("reference");
+                string iban = "";
+                string description = "";
+                string start_balance = "";
+                string mutation = "";
+                string end_balance = "";
+
+                string nodeName = "";
+
+                while (xmlreader.Read()) {
+                    if (xmlreader.NodeType == XmlNodeType.Element) {
+                        nodeName = xmlreader.Name;
+
+                        if (nodeName == "record") {
+                            expect_new_record = true;
+                            break;
+                        }
+                    }
+                    else if (xmlreader.NodeType == XmlNodeType.Text) {
+                        switch (nodeName) {
+                            case "accountNumber":
+                                iban = xmlreader.Value;
+                                break;
+                            case "description":
+                                description = xmlreader.Value;
+                                break;
+                            case "startBalance":
+                                start_balance = xmlreader.Value;
+                                break;
+                            case "mutation":
+                                mutation = xmlreader.Value;
+                                break;
+                            case "endBalance":
+                                end_balance = xmlreader.Value;
+                                break;
+                            case "":
+                            case "records":
+                                break;
+                            default:
+                                throw new Exception($"Unknown element '{xmlreader.Name}'.");
+                        }
+                    }
+                }
+
+                var transaction = new TransactionChecker.Transaction {
+                    Reference = reference,
+                    IBAN = iban,
+                    Description = description,
+                    Start_Balance = start_balance,
+                    Mutation = mutation,
+                    End_Balance = end_balance,
+                };
+
+                var validation = transactionChecker.Is_Valid_Transaction(transaction);
+
+                if (!validation.valid)
+                    file_validation_result.Add((    transactionRef: transaction.Reference,
+                                                    transactionDescr: transaction.Description,
+                                                    validationErrors: validation.reasons));
+            }
+
+            return file_validation_result;
         }
 
 
@@ -68,6 +144,7 @@ namespace Simple_MT940_Checker
             var file_validation_result = new List<( string transactionRef, 
                                                     string transactionDescr, 
                                                     List<string> validationErrors)>();
+
             string line = reader.ReadLine();
 
             if (line == null)
@@ -287,6 +364,9 @@ namespace Simple_MT940_Checker
             iban = iban.Replace(" ", "").ToUpper();
 
             // Check length
+            if (iban.Length < 8)
+                throw new Validation_Exception($"IBAN is of wrong length({iban.Length}).");
+
             var country_code = iban.Substring(0, 2);
             if (iban.Length != IbanLength_per_Country[country_code].length)
                 throw new Validation_Exception($"IBAN is of wrong length({iban.Length}) for country {IbanLength_per_Country[country_code].name}");
