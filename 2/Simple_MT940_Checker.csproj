@@ -6,8 +6,8 @@
     <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
     <ProjectGuid>{AD16DE37-894C-45A0-9681-F4DF6009C4C7}</ProjectGuid>
     <OutputType>WinExe</OutputType>
-    <RootNamespace>_2</RootNamespace>
-    <AssemblyName>2</AssemblyName>
+    <RootNamespace>Simple_MT940_Checker</RootNamespace>
+    <AssemblyName>Simple_MT940_Checker</AssemblyName>
     <TargetFrameworkVersion>v4.7.2</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
